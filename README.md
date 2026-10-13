@@ -1,46 +1,95 @@
+# TaskTrack API
 
-# TaskTrack
+A RESTful Task Management API built with Node.js and Express.js. This project is part of my backend development learning journey.
 
-TaskTrack is a full-stack task management application built as part of my Week 1 development learning plan.
+## Features
 
-## Tech Stack
+- Create a new task
+- Retrieve all tasks
+- Retrieve a task by ID
+- Filter tasks by status
+- Update tasks using PUT and PATCH
+- Delete tasks
+- Validate task titles and statuses
+- Handle invalid JSON and errors
+- Return appropriate HTTP status codes
+
+## Technologies
 
 - Node.js
 - Express.js
-- MongoDB and Mongoose (planned)
-- React (planned)
-- Python and FastAPI (planned)
+- JavaScript
+- Postman for API testing
 
-## Current Progress
+## Prerequisites
 
-- [x] Development environment setup
-- [x] Node.js project initialized
-- [x] Express installed
-- [x] Git and GitHub configured
-- [ ] Build REST API
-- [ ] Add MongoDB integration
-- [ ] Implement authentication with JWT
-- [ ] Build React frontend
-- [ ] Add FastAPI service
-- [ ] Deploy the application
+- Node.js and npm installed
+- Postman or another API testing tool
 
-## Getting Started
+## Installation
 
-### Prerequisites
+Clone the repository and enter the project directory:
 
-- Node.js
-- npm
+```bash
+git clone YOUR_REPOSITORY_URL
+cd TaskTrack
+```
 
-### Installation
+Install dependencies:
 
-1. Clone the repository.
-2. Open the project directory.
-3. Install dependencies:
+```bash
+npm install
+```
 
-   ```bash
-   npm install
-   ```
+Start the server:
 
-## Project Status
+```bash
+npm start
+```
 
-Currently in the initial setup stage. More features will be added throughout development.
+The API runs at:
+
+`http://localhost:3000`
+
+## API Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/` | Welcome message |
+| GET | `/api/tasks` | Retrieve all tasks |
+| GET | `/api/tasks?status=pending` | Filter tasks by status |
+| GET | `/api/tasks/:id` | Retrieve a task by ID |
+| POST | `/api/tasks` | Create a task |
+| PUT | `/api/tasks/:id` | Replace a task |
+| PATCH | `/api/tasks/:id` | Partially update a task |
+| DELETE | `/api/tasks/:id` | Delete a task |
+
+## Example Request
+
+Create a task using `POST /api/tasks` with the JSON body:
+
+```json
+{
+  "title": "Learn Express",
+  "description": "Practice REST API development",
+  "status": "pending"
+}
+```
+
+Valid task statuses:
+
+- `pending`
+- `in-progress`
+- `completed`
+
+## Current Limitations
+
+- Tasks are stored in memory, so they reset when the server restarts.
+- MongoDB persistence and user authentication are not implemented yet.
+
+## Learning Progress
+
+- Day 1: Project setup and development environment
+- Day 2: Express.js, REST APIs, CRUD operations, validation, and error handling
+
+More features will be added as the project progresses.
