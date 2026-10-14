@@ -1,18 +1,23 @@
 require("dotenv").config();
-
+const cors = require("cors");
 const connectDB = require("./config/db");
 const authRoutes = require("./routes/auth");
 const authMiddleware = require("./middleware/authMiddleware");
 const User = require("./models/User");
 const Task = require("./models/Task");
+
 // Create an Express application.
 const express = require("express");
 // The app object is used to define routes, middleware, and server behavior.
 const app = express();
+app.use(cors({
+  origin: "http://localhost:5173",
+}));
 // Define the port number on which the server will run.
 const PORT = 3000;
 // Middleware: allows Express to read JSON request bodies.
 app.use(express.json());
+
 app.use("/api/auth", authRoutes);
 
 
