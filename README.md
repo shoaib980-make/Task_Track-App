@@ -31,8 +31,8 @@ A RESTful Task Management API built with Node.js and Express.js. This project is
 Clone the repository and enter the project directory:
 
 ```bash
-git clone YOUR_REPOSITORY_URL
-cd TaskTrack
+git clone https://github.com/shoaib980-make/Task_Track-App.git
+cd Task_Track-App
 ```
 
 Install dependencies:

@@ -1,3 +1,10 @@
+require("dotenv").config();
+
+const connectDB = require("./config/db");
+const authRoutes = require("./routes/auth");
+const authMiddleware = require("./middleware/authMiddleware");
+const User = require("./models/User");
+const Task = require("./models/Task");
 // Create an Express application.
 const express = require("express");
 // The app object is used to define routes, middleware, and server behavior.
@@ -6,6 +13,30 @@ const app = express();
 const PORT = 3000;
 // Middleware: allows Express to read JSON request bodies.
 app.use(express.json());
+app.use("/api/auth", authRoutes);
+
+
+app.get("/api/auth/me", authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id)
+      .select("-password");
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    return res.status(200).json({ user });
+  } catch (error) {
+    console.error("Profile error:", error.message);
+
+    return res.status(500).json({
+      message: "Server error",
+    });
+  }
+});
+
 
 //First route
 app.get("/",(req, res)=>{
@@ -14,232 +45,398 @@ app.get("/",(req, res)=>{
   });
 });
 
-// Get all tasks (temporary in-memory data)
-const tasks = [
-  {
-    id: 1,
-    title: "Learn Express",
-    description: "Understand routing and HTTP methods",
-    status: "pending",
-  },
-];
 
+const isValidTaskId = (id) => /^[a-f\d]{24}$/i.test(id);
 
-app.get("/api/tasks", (req, res) => {
-  const { status } = req.query;
+// GET /api/tasks
+// Get only the logged-in user's tasks.
+app.get("/api/tasks", authMiddleware, async (req, res) => {
+  try {
+    const { status } = req.query;
 
-  // If a status filter is provided, filter the tasks.
-  const filteredTasks = status
-    ? tasks.filter((task) => task.status === status)
-    : tasks;
+    const allowedStatuses = ["pending", "in-progress", "completed"];
 
-  res.status(200).json({
-    success: true,
-    count: filteredTasks.length,
-    tasks: filteredTasks,
-  });
-});
-
-
-
-app.get("/api/tasks/:id", (req, res) => {
-  const id = Number(req.params.id);
-
-  const task = tasks.find((task) => task.id === id);
-
-  if (!task) {
-    return res.status(404).json({
-      success: false,
-      message: "Task not found",
-    });
-  }
-
-  res.status(200).json({
-    success: true,
-    task: task,
-  });
-});
-
-
-
-app.delete("/api/tasks/:id", (req, res) => {
-  const id = Number(req.params.id);
-
-  const index = tasks.findIndex((task) => task.id === id);
-
-  if (index === -1) {
-    return res.status(404).json({
-      success: false,
-      message: "Task not found",
-    });
-  }
-
-  const deletedTask = tasks.splice(index, 1)[0];
-
-  res.status(200).json({
-    success: true,
-    message: "Task deleted successfully",
-    task: deletedTask,
-  });
-});
-
-
-
-app.patch("/api/tasks/:id", (req, res) => {
-  const id = Number(req.params.id);
-
-  const task = tasks.find((task) => task.id === id);
-
-  if (!task) {
-    return res.status(404).json({
-      success: false,
-      message: "Task not found",
-    });
-  }
-
-  const allowedFields = ["title", "description", "status", "dueDate"];
-  const updates = {};
-
-  // Copy only fields that are allowed to be updated.
-  for (const field of allowedFields) {
-    if (Object.hasOwn(req.body, field)) {
-      updates[field] = req.body[field];
+    if (status && !allowedStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid status",
+      });
     }
-  }
 
-  // Validate title before changing the original task.
-  if (
-    Object.hasOwn(updates, "title") &&
-    (typeof updates.title !== "string" || !updates.title.trim())
-  ) {
-    return res.status(400).json({
+    const filter = { user: req.user.id };
+
+    if (status) {
+      filter.status = status;
+    }
+
+    const tasks = await Task.find(filter).sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      count: tasks.length,
+      tasks,
+    });
+  } catch (error) {
+    console.error("Get tasks error:", error.message);
+
+    return res.status(500).json({
       success: false,
-      message: "Task title must be a non-empty string",
+      message: "Failed to retrieve tasks",
     });
   }
-
-  // Validate status before changing the original task.
-  const allowedStatuses = ["pending", "in-progress", "completed"];
-
-  if (
-    Object.hasOwn(updates, "status") &&
-    !allowedStatuses.includes(updates.status)
-  ) {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid status",
-    });
-  }
-
-  // Validate description.
-  if (
-    Object.hasOwn(updates, "description") &&
-    typeof updates.description !== "string"
-  ) {
-    return res.status(400).json({
-      success: false,
-      message: "Description must be a string",
-    });
-  }
-
-  // Clean the title, if provided.
-  if (Object.hasOwn(updates, "title")) {
-    updates.title = updates.title.trim();
-  }
-
-  // Apply changes only after validation succeeds.
-  Object.assign(task, updates);
-
-  res.status(200).json({
-    success: true,
-    message: "Task updated successfully",
-    task,
-  });
 });
 
+// GET /api/tasks/:id
+// Get one task belonging to the logged-in user.
+app.get("/api/tasks/:id", authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
 
+    if (!isValidTaskId(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid task ID",
+      });
+    }
 
-app.put("/api/tasks/:id", (req, res) => {
-  const id = Number(req.params.id);
+    const task = await Task.findOne({
+      _id: id,
+      user: req.user.id,
+    });
 
-  const index = tasks.findIndex((task) => task.id === id);
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: "Task not found",
+      });
+    }
 
-  if (index === -1) {
-    return res.status(404).json({
+    return res.status(200).json({
+      success: true,
+      task,
+    });
+  } catch (error) {
+    console.error("Get task error:", error.message);
+
+    return res.status(500).json({
       success: false,
-      message: "Task not found",
+      message: "Failed to retrieve task",
     });
   }
-
-  const { title, description, status, dueDate } = req.body;
-  const allowedStatuses = ["pending", "in-progress", "completed"];
-
-  if (status !== undefined && !allowedStatuses.includes(status)) {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid status",
-    });
-  }
-
-  if (typeof title !== "string" || !title.trim()) {
-    return res.status(400).json({
-      success: false,
-      message: "Task title is required",
-    });
-  }
-
-  const updatedTask = {
-    id,
-    title: title.trim(),
-    description: description || "",
-    status: status || "pending",
-    dueDate: dueDate || null,
-  };
-
-  tasks[index] = updatedTask;
-
-  res.status(200).json({
-    success: true,
-    message: "Task replaced successfully",
-    task: updatedTask,
-  });
 });
 
-app.post("/api/tasks", (req, res) => {
-  const { title, description, status, dueDate } = req.body;
-  const allowedStatuses = ["pending", "in-progress", "completed"];
+// POST /api/tasks
+// Create a task for the logged-in user.
+app.post("/api/tasks", authMiddleware, async (req, res) => {
+  try {
+    const { title, description, status, dueDate } = req.body;
+    const allowedStatuses = ["pending", "in-progress", "completed"];
 
-  if (status !== undefined && !allowedStatuses.includes(status)) {
-    return res.status(400).json({
+    if (typeof title !== "string" || !title.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Task title must be a non-empty string",
+      });
+    }
+
+    if (
+      status !== undefined &&
+      !allowedStatuses.includes(status)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid status",
+      });
+    }
+
+    if (
+      description !== undefined &&
+      typeof description !== "string"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Description must be a string",
+      });
+    }
+
+    if (
+      dueDate !== undefined &&
+      dueDate !== null &&
+      (typeof dueDate !== "string" ||
+        dueDate.trim() === "" ||
+        Number.isNaN(Date.parse(dueDate)))
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid due date",
+      });
+    }
+
+    const task = await Task.create({
+      title: title.trim(),
+      description: description || "",
+      status: status || "pending",
+      dueDate: dueDate || null,
+      user: req.user.id,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Task created successfully",
+      task,
+    });
+  } catch (error) {
+    console.error("Create task error:", error.message);
+
+    return res.status(500).json({
       success: false,
-      message: "Invalid status",
+      message: "Failed to create task",
     });
   }
+});
 
-  if (typeof title !== "string" || !title.trim()) {
-    return res.status(400).json({
+// PATCH /api/tasks/:id
+// Update selected fields of a task.
+app.patch("/api/tasks/:id", authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!isValidTaskId(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid task ID",
+      });
+    }
+
+    const allowedFields = [
+      "title",
+      "description",
+      "status",
+      "dueDate",
+    ];
+
+    const updates = {};
+
+    for (const field of allowedFields) {
+      if (Object.hasOwn(req.body, field)) {
+        updates[field] = req.body[field];
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Provide at least one valid field to update",
+      });
+    }
+
+    if (
+      Object.hasOwn(updates, "title") &&
+      (typeof updates.title !== "string" ||
+        !updates.title.trim())
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Task title must be a non-empty string",
+      });
+    }
+
+    if (
+      Object.hasOwn(updates, "description") &&
+      typeof updates.description !== "string"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Description must be a string",
+      });
+    }
+
+    const allowedStatuses = ["pending", "in-progress", "completed"];
+
+    if (
+      Object.hasOwn(updates, "status") &&
+      !allowedStatuses.includes(updates.status)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid status",
+      });
+    }
+
+    if (
+      Object.hasOwn(updates, "dueDate") &&
+      updates.dueDate !== null &&
+      (typeof updates.dueDate !== "string" ||
+        updates.dueDate.trim() === "" ||
+        Number.isNaN(Date.parse(updates.dueDate)))
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid due date",
+      });
+    }
+
+    if (Object.hasOwn(updates, "title")) {
+      updates.title = updates.title.trim();
+    }
+
+    const task = await Task.findOneAndUpdate(
+      { _id: id, user: req.user.id },
+      { $set: updates },
+      { new: true, runValidators: true }
+    );
+
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: "Task not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Task updated successfully",
+      task,
+    });
+  } catch (error) {
+    console.error("Update task error:", error.message);
+
+    return res.status(500).json({
       success: false,
-      message: "Task title must be a non-empty string",
+      message: "Failed to update task",
     });
   }
+});
 
-  const newTask = {
-    id: tasks.length
-      ? Math.max(...tasks.map((task) => task.id)) + 1
-      : 1,
-    title: title.trim(),
-    description: description || "",
-    status: status || "pending",
-    dueDate: dueDate || null,
-  };
+// PUT /api/tasks/:id
+// Replace a task's editable fields.
+app.put("/api/tasks/:id", authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
 
-  tasks.push(newTask);
+    if (!isValidTaskId(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid task ID",
+      });
+    }
 
-  res.status(201).json({
-    success: true,
-    message: "Task created successfully",
-    task: newTask,
-  });
+    const { title, description, status, dueDate } = req.body;
+    const allowedStatuses = ["pending", "in-progress", "completed"];
+
+    if (typeof title !== "string" || !title.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Task title is required",
+      });
+    }
+
+    if (
+      status !== undefined &&
+      !allowedStatuses.includes(status)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid status",
+      });
+    }
+
+    if (
+      description !== undefined &&
+      typeof description !== "string"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Description must be a string",
+      });
+    }
+
+    if (
+      dueDate !== undefined &&
+      dueDate !== null &&
+      (typeof dueDate !== "string" ||
+        dueDate.trim() === "" ||
+        Number.isNaN(Date.parse(dueDate)))
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid due date",
+      });
+    }
+
+    const task = await Task.findOneAndUpdate(
+      { _id: id, user: req.user.id },
+      {
+        $set: {
+          title: title.trim(),
+          description: description || "",
+          status: status || "pending",
+          dueDate: dueDate || null,
+        },
+      },
+      { new: true, runValidators: true }
+    );
+
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: "Task not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Task replaced successfully",
+      task,
+    });
+  } catch (error) {
+    console.error("Replace task error:", error.message);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to replace task",
+    });
+  }
+});
+
+// DELETE /api/tasks/:id
+// Delete only a task belonging to the logged-in user.
+app.delete("/api/tasks/:id", authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!isValidTaskId(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid task ID",
+      });
+    }
+
+    const task = await Task.findOneAndDelete({
+      _id: id,
+      user: req.user.id,
+    });
+
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: "Task not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Task deleted successfully",
+      task,
+    });
+  } catch (error) {
+    console.error("Delete task error:", error.message);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete task",
+    });
+  }
 });
 
 
@@ -269,7 +466,12 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start the server
-app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
-});
+const startServer = async () => {
+  await connectDB();
+
+  app.listen(process.env.PORT || 3000, () => {
+    console.log("Server running on port 3000");
+  });
+};
+
+startServer();
