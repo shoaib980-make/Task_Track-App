@@ -16,9 +16,25 @@ app.use(cors({
 // Define the port number on which the server will run.
 const PORT = 3000;
 // Middleware: allows Express to read JSON request bodies.
+
 app.use(express.json());
 
+// Ensure MongoDB is connected before handling API requests.
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (error) {
+    console.error("Database connection error:", error.message);
+    res.status(503).json({
+      success: false,
+      message: "Database temporarily unavailable",
+    });
+  }
+});
+
 app.use("/api/auth", authRoutes);
+
 
 
 app.get("/api/auth/me", authMiddleware, async (req, res) => {
@@ -471,12 +487,26 @@ app.use((err, req, res, next) => {
   });
 });
 
-const startServer = async () => {
-  await connectDB();
 
-  app.listen(process.env.PORT || 3000, () => {
-    console.log("Server running on port 3000");
-  });
+const startServer = async () => {
+  try {
+    await connectDB();
+
+    app.listen(process.env.PORT || 3000, () => {
+      console.log(
+        `Server running on port ${process.env.PORT || 3000}`
+      );
+    });
+  } catch (error) {
+    console.error("Failed to start server:", error.message);
+    process.exitCode = 1;
+  }
 };
 
-startServer();
+// Export the Express app for Vercel.
+module.exports = app;
+
+// Start a local server only when running `node server.js`.
+if (require.main === module) {
+  startServer();
+}
