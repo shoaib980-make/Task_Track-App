@@ -10,9 +10,18 @@ const Task = require("./models/Task");
 const express = require("express");
 // The app object is used to define routes, middleware, and server behavior.
 const app = express();
-app.use(cors({
-  origin: "http://localhost:5173",
-}));
+
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://task-track-app-inky.vercel.app",
+];
+
+app.use(
+  cors({
+    origin: allowedOrigins,
+  })
+);
+
 // Define the port number on which the server will run.
 const PORT = 3000;
 // Middleware: allows Express to read JSON request bodies.
